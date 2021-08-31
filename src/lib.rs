@@ -9,25 +9,25 @@ mod tests {
     #[test]
     fn test_timer_check_state() {
         let mut timer = Timer::new();
-        assert!(timer.pause_timer().is_err());
-        assert!(timer.reset_timer().is_err());
-        assert!(timer.resume_timer().is_err());
-        assert!(timer.start_timer().is_ok());
+        assert!(timer.pause().is_err());
+        assert!(timer.reset().is_err());
+        assert!(timer.resume().is_err());
+        assert!(timer.start().is_ok());
 
-        assert!(timer.reset_timer().is_err());
-        assert!(timer.start_timer().is_err());
-        assert!(timer.resume_timer().is_err());
-        assert!(timer.pause_timer().is_ok());
+        assert!(timer.reset().is_err());
+        assert!(timer.start().is_err());
+        assert!(timer.resume().is_err());
+        assert!(timer.pause().is_ok());
 
-        assert!(timer.resume_timer().is_ok());
-        assert!(timer.finish_timer().is_ok());
-        assert!(timer.reset_timer().is_ok());
+        assert!(timer.resume().is_ok());
+        assert!(timer.finish().is_ok());
+        assert!(timer.reset().is_ok());
     }
 
     #[test]
     fn test_timer_time() {
         let mut timer = Timer::new();
-        timer.start_timer().expect("Illegal!");
+        timer.start().expect("Illegal!");
         std::thread::sleep(Duration::from_secs(1));
         assert_eq!(timer.get_time().expect("Illegal").as_secs(), 1);
     }
@@ -35,10 +35,10 @@ mod tests {
 
 #[derive(std::cmp::PartialEq, Debug)]
 pub enum TimerState {
-    TimerInit,
-    TimerRunning,
-    TimerPaused,
-    TimerFinished,
+    Init,
+    Running,
+    Paused,
+    Finished,
 }
 pub struct Timer {
     start_time: Option<Instant>,
@@ -49,50 +49,50 @@ impl Timer {
     pub fn new() -> Timer {
         Timer {
             start_time: None,
-            timer_state: TimerState::TimerInit,
+            timer_state: TimerState::Init,
         }
     }
 
     pub fn get_time(&self) -> Result<Duration, TimerError> {
-        if self.timer_state == TimerState::TimerInit {
+        if self.timer_state == TimerState::Init {
             return Err(TimerError { code: 0x01 });
         }
 
         Ok(Instant::now().duration_since(self.start_time.expect("None")))
     }
 
-    pub fn start_timer(&mut self) -> Result<(), TimerError> {
-        self.timer_state = self.next_state(TimerState::TimerRunning)?;
+    pub fn start(&mut self) -> Result<(), TimerError> {
+        self.timer_state = self.next_state(TimerState::Running)?;
         self.start_time = Some(Instant::now());
 
         Ok(())
     }
 
-    pub fn pause_timer(&mut self) -> Result<(), TimerError> {
-        self.timer_state = self.next_state(TimerState::TimerPaused)?;
+    pub fn pause(&mut self) -> Result<(), TimerError> {
+        self.timer_state = self.next_state(TimerState::Paused)?;
 
         Ok(())
     }
 
-    pub fn resume_timer(&mut self) -> Result<(), TimerError> {
+    pub fn resume(&mut self) -> Result<(), TimerError> {
         // If timer is in init state it shouldn't be able to be resumed. However we can't really check that in next_state()
-        if self.timer_state == TimerState::TimerInit {
+        if self.timer_state == TimerState::Init {
             return Err(TimerError { code: 0x01 });
         }
-        self.timer_state = self.next_state(TimerState::TimerRunning)?;
+        self.timer_state = self.next_state(TimerState::Running)?;
 
         Ok(())
     }
 
-    pub fn reset_timer(&mut self) -> Result<(), TimerError> {
-        self.timer_state = self.next_state(TimerState::TimerInit)?;
+    pub fn reset(&mut self) -> Result<(), TimerError> {
+        self.timer_state = self.next_state(TimerState::Init)?;
         self.start_time = None;
 
         Ok(())
     }
 
-    pub fn finish_timer(&mut self) -> Result<(), TimerError> {
-        self.timer_state = self.next_state(TimerState::TimerFinished)?;
+    pub fn finish(&mut self) -> Result<(), TimerError> {
+        self.timer_state = self.next_state(TimerState::Finished)?;
 
         Ok(())
     }
@@ -100,23 +100,23 @@ impl Timer {
     fn next_state(&self, state: TimerState) -> Result<TimerState, TimerError> {
         let timer_error = TimerError { code: 0x01 };
         match state {
-            TimerState::TimerInit => match self.timer_state {
-                TimerState::TimerFinished => return Ok(TimerState::TimerInit),
+            TimerState::Init => match self.timer_state {
+                TimerState::Finished => return Ok(TimerState::Init),
                 _ => return Err(timer_error),
             },
-            TimerState::TimerRunning => match self.timer_state {
-                TimerState::TimerPaused | TimerState::TimerInit => {
-                    return Ok(TimerState::TimerRunning)
+            TimerState::Running => match self.timer_state {
+                TimerState::Paused | TimerState::Init => {
+                    return Ok(TimerState::Running)
                 }
                 _ => return Err(timer_error),
             },
-            TimerState::TimerPaused => match self.timer_state {
-                TimerState::TimerRunning => return Ok(TimerState::TimerPaused),
+            TimerState::Paused => match self.timer_state {
+                TimerState::Running => return Ok(TimerState::Paused),
                 _ => return Err(timer_error),
             },
-            TimerState::TimerFinished => match self.timer_state {
-                TimerState::TimerRunning | TimerState::TimerPaused => {
-                    return Ok(TimerState::TimerFinished)
+            TimerState::Finished => match self.timer_state {
+                TimerState::Running | TimerState::Paused => {
+                    return Ok(TimerState::Finished)
                 }
                 _ => return Err(timer_error),
             },
