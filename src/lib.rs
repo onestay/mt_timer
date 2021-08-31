@@ -64,8 +64,11 @@ impl Timer {
         if self.timer_state == TimerState::Init {
             return Err(TimerError { code: 0x01 });
         }
-
-        Ok(Instant::now().duration_since(self.start_time.expect("None")))
+        if let Some(start_time) = self.start_time {
+            Ok(Instant::now().duration_since(start_time))
+        } else {
+            Err(TimerError { code: 0x03 })
+        }
     }
 
     pub fn start(&mut self) -> Result<(), TimerError> {
@@ -87,13 +90,18 @@ impl Timer {
             return Err(TimerError { code: 0x01 });
         }
         self.timer_state = self.next_state(TimerState::Running)?;
+        let start_time = match self.start_time {
+            Some(start_time) => start_time,
+            None => return Err(TimerError { code: 0x03 }),
+        };
 
-        if let Some(last_paused) = self.last_paused {
-            let time_diff = self.start_time.expect("None") + Instant::now().duration_since(last_paused);
-            self.start_time = Some(time_diff)
-        } else {
-            return Err(TimerError { code: 0x01 });
-        }
+        let last_paused = match self.last_paused {
+            Some(start_time) => start_time,
+            None => return Err(TimerError { code: 0x03 }),
+        };
+
+        let time_diff = start_time + Instant::now().duration_since(last_paused);
+        self.start_time = Some(time_diff);
 
         Ok(())
     }
@@ -101,6 +109,7 @@ impl Timer {
     pub fn reset(&mut self) -> Result<(), TimerError> {
         self.timer_state = self.next_state(TimerState::Init)?;
         self.start_time = None;
+        self.last_paused = None;
 
         Ok(())
     }
@@ -144,6 +153,7 @@ impl fmt::Display for TimerError {
         let msg = match self.code {
             0x01 => "Illegal timer state",
             0x02 => "Invalid subtimer index",
+            0x03 => "'None' not expected",
             _ => "Unexpected Error",
         };
 
