@@ -30,6 +30,11 @@ mod tests {
         timer.start().expect("Illegal!");
         std::thread::sleep(Duration::from_secs(1));
         assert_eq!(timer.get_time().expect("Illegal").as_secs(), 1);
+        timer.pause().expect("Illegal!");
+        std::thread::sleep(Duration::from_secs(2));
+        timer.resume().expect("Illegal");
+        std::thread::sleep(Duration::from_secs(1));
+        assert_eq!(timer.get_time().expect("illegal").as_secs(), 2);
     }
 }
 
@@ -43,6 +48,7 @@ pub enum TimerState {
 pub struct Timer {
     start_time: Option<Instant>,
     timer_state: TimerState,
+    last_paused: Option<Instant>,
 }
 
 impl Timer {
@@ -50,6 +56,7 @@ impl Timer {
         Timer {
             start_time: None,
             timer_state: TimerState::Init,
+            last_paused: None,
         }
     }
 
@@ -70,7 +77,7 @@ impl Timer {
 
     pub fn pause(&mut self) -> Result<(), TimerError> {
         self.timer_state = self.next_state(TimerState::Paused)?;
-
+        self.last_paused = Some(Instant::now());
         Ok(())
     }
 
@@ -80,6 +87,13 @@ impl Timer {
             return Err(TimerError { code: 0x01 });
         }
         self.timer_state = self.next_state(TimerState::Running)?;
+
+        if let Some(last_paused) = self.last_paused {
+            let time_diff = self.start_time.expect("None") + Instant::now().duration_since(last_paused);
+            self.start_time = Some(time_diff)
+        } else {
+            return Err(TimerError { code: 0x01 });
+        }
 
         Ok(())
     }
@@ -105,9 +119,7 @@ impl Timer {
                 _ => return Err(timer_error),
             },
             TimerState::Running => match self.timer_state {
-                TimerState::Paused | TimerState::Init => {
-                    return Ok(TimerState::Running)
-                }
+                TimerState::Paused | TimerState::Init => return Ok(TimerState::Running),
                 _ => return Err(timer_error),
             },
             TimerState::Paused => match self.timer_state {
@@ -115,9 +127,7 @@ impl Timer {
                 _ => return Err(timer_error),
             },
             TimerState::Finished => match self.timer_state {
-                TimerState::Running | TimerState::Paused => {
-                    return Ok(TimerState::Finished)
-                }
+                TimerState::Running | TimerState::Paused => return Ok(TimerState::Finished),
                 _ => return Err(timer_error),
             },
         }
