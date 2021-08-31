@@ -33,7 +33,7 @@ mod tests {
     }
 }
 
-#[derive(std::cmp::PartialEq,Debug)]
+#[derive(std::cmp::PartialEq, Debug)]
 pub enum TimerState {
     TimerInit,
     TimerRunning,
@@ -93,7 +93,7 @@ impl Timer {
 
     pub fn finish_timer(&mut self) -> Result<(), TimerError> {
         self.timer_state = self.next_state(TimerState::TimerFinished)?;
-        
+
         Ok(())
     }
 
@@ -133,6 +133,7 @@ impl fmt::Display for TimerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let msg = match self.code {
             0x01 => "Illegal timer state",
+            0x02 => "Invalid subtimer index",
             _ => "Unexpected Error",
         };
 
