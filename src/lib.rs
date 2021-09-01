@@ -144,7 +144,10 @@ impl Timer {
         }
     }
 
-    pub fn add_subtimer(&mut self) -> usize {
+    pub fn add_subtimer(&mut self) -> Result<usize, TimerError> {
+        if self.timer_state != TimerState::Init {
+            return Err(TimerError { code: 0x01 });
+        }
         let sub_timer = SubTimer {
             time: None,
             finished: false,
@@ -152,13 +155,17 @@ impl Timer {
 
         self.sub_timers.push(sub_timer);
 
-        return self.sub_timers.len() - 1;
+        return Ok(self.sub_timers.len() - 1);
     }
 
     pub fn finish_subtimer(&mut self, index: usize) -> Result<&SubTimer, TimerError> {
-        let time = self.get_time()?;
-
+        if self.timer_state != TimerState::Running {
+            return Err(TimerError { code: 0x01 });
+        }
+        
         self.check_subtimer_index(index)?;
+
+        let time = self.get_time()?;
 
         let sub_timer = &mut self.sub_timers[index];
         if sub_timer.finished {
@@ -167,10 +174,25 @@ impl Timer {
         sub_timer.time = Some(time);
         sub_timer.finished = true;
 
+        let mut done = true;
+        for sub_timer in &self.sub_timers {
+            if !sub_timer.finished {
+                done = false;
+                break;
+            }
+        }
+
+        if done {
+            self.finish()?;
+        }
+
         Ok(&self.sub_timers[index])
     }
 
     pub fn delete_subtimer(&mut self, index: usize) -> Result<(), TimerError> {
+        if self.timer_state != TimerState::Init {
+            return Err(TimerError { code: 0x01 });
+        }
         self.check_subtimer_index(index)?;
 
         self.sub_timers.remove(index);
@@ -192,6 +214,12 @@ impl Timer {
     }
 
     pub fn resume_subtimer(&mut self, index: usize) -> Result<(), TimerError> {
+        if self.timer_state == TimerState::Finished {
+            self.resume()?;
+        } else if self.timer_state != TimerState::Running {
+            return Err(TimerError { code: 0x01 });
+        }
+        
         self.check_subtimer_index(index)?;
 
         let subtimer = &mut self.sub_timers[index];
