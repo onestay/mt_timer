@@ -45,6 +45,7 @@ pub enum TimerState {
     Paused,
     Finished,
 }
+
 pub struct Timer {
     start_time: Option<Instant>,
     timer_state: TimerState,
@@ -117,7 +118,6 @@ impl Timer {
     }
 
     pub fn finish(&mut self) -> Result<(), TimerError> {
-
         self.timer_state = self.next_state(TimerState::Finished)?;
         let time = self.get_time()?;
 
@@ -125,7 +125,7 @@ impl Timer {
             sub_timer.finished = true;
             sub_timer.time = Some(time)
         }
-        
+
         Ok(())
     }
 
@@ -169,7 +169,7 @@ impl Timer {
         if self.timer_state != TimerState::Running {
             return Err(TimerError { code: 0x01 });
         }
-        
+
         self.check_subtimer_index(index)?;
 
         let time = self.get_time()?;
