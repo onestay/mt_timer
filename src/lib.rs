@@ -153,9 +153,34 @@ impl fmt::Display for TimerError {
             0x01 => "Illegal timer state",
             0x02 => "Invalid subtimer index",
             0x03 => "'None' not expected",
+            0x04 => "SubTimer not finished",
             _ => "Unexpected Error",
         };
 
         write!(f, "{}", msg)
+    }
+}
+#[derive(Debug, PartialEq)]
+pub struct SubTimer {
+    time: Option<Duration>,
+    finished: bool
+}
+
+impl SubTimer {
+    pub fn get_time(&self) -> Result<Duration, TimerError> {
+        if !self.finished {
+            return Err(TimerError{code:0x04});
+        }
+
+        let time= match self.time  {
+            Some(time) => time,
+            None => return Err(TimerError{code:0x03})
+        };
+
+        Ok(time)
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.finished
     }
 }
