@@ -48,11 +48,18 @@ mod tests {
         std::thread::sleep(Duration::from_secs(1));
         let a = timer.finish_subtimer(a).expect("Error");
         assert_eq!(a.time.expect("Should contain time").as_secs(), 1);
+        assert_eq!(timer.get_subtimer(4).is_err(), true);
         timer.finish().expect("Illegal");
         std::thread::sleep(Duration::from_secs(1));
         let b = timer.get_subtimer(b).expect("Error");
         std::thread::sleep(Duration::from_secs(1));
         assert_eq!(b.time.expect("Should contain time").as_secs(), 1);
+
+        timer.reset().expect("Illegal");
+        assert_eq!(timer.get_subtimer(0).is_err(), true);
+
+        let a = timer.add_subtimer().expect("Illegal");
+        assert_eq!(timer.finish_subtimer(a).is_err(), true);
     }
 }
 
@@ -233,7 +240,7 @@ impl Timer {
     }
 
     fn check_subtimer_index(&self, index: usize) -> Result<(), TimerError> {
-        if index > self.sub_timers.len() {
+        if self.sub_timers.len() == 0 || index > self.sub_timers.len() {
             return Err(TimerError { code: 0x02 });
         }
 
