@@ -49,6 +49,7 @@ pub struct Timer {
     start_time: Option<Instant>,
     timer_state: TimerState,
     last_paused: Option<Instant>,
+    sub_timers: Vec<SubTimer>,
 }
 
 impl Timer {
@@ -57,6 +58,7 @@ impl Timer {
             start_time: None,
             timer_state: TimerState::Init,
             last_paused: None,
+            sub_timers: vec![],
         }
     }
 
@@ -141,6 +143,63 @@ impl Timer {
             },
         }
     }
+
+    pub fn add_subtimer(&mut self) -> usize {
+        let sub_timer = SubTimer {
+            time: None,
+            finished: false,
+        };
+
+        self.sub_timers.push(sub_timer);
+
+        return self.sub_timers.len() - 1;
+    }
+
+    pub fn finish_subtimer(&mut self, index: usize) -> Result<&SubTimer, TimerError> {
+        let time = self.get_time()?;
+
+        self.check_subtimer_index(index)?;
+
+        let sub_timer = &mut self.sub_timers[index];
+        if sub_timer.finished {
+            return Err(TimerError { code: 0x01 });
+        }
+        sub_timer.time = Some(time);
+        sub_timer.finished = true;
+
+        Ok(&self.sub_timers[index])
+    }
+
+    pub fn delete_subtimer(&mut self, index: usize) -> Result<(), TimerError> {
+        self.check_subtimer_index(index)?;
+
+        self.sub_timers.remove(index);
+        Ok(())
+    }
+
+    pub fn get_subtimer(&mut self, index: usize) -> Result<&SubTimer, TimerError> {
+        self.check_subtimer_index(index)?;
+
+        Ok(&self.sub_timers[index])
+    }
+
+    fn check_subtimer_index(&self, index: usize) -> Result<(), TimerError> {
+        if index > self.sub_timers.len() {
+            return Err(TimerError { code: 0x02 });
+        }
+
+        Ok(())
+    }
+
+    pub fn resume_subtimer(&mut self, index: usize) -> Result<(), TimerError> {
+        self.check_subtimer_index(index)?;
+
+        let subtimer = &mut self.sub_timers[index];
+        subtimer.finished = false;
+        subtimer.time = None;
+
+        Ok(())
+    }
 }
 #[derive(Debug)]
 pub struct TimerError {
@@ -163,18 +222,18 @@ impl fmt::Display for TimerError {
 #[derive(Debug, PartialEq)]
 pub struct SubTimer {
     time: Option<Duration>,
-    finished: bool
+    finished: bool,
 }
 
 impl SubTimer {
     pub fn get_time(&self) -> Result<Duration, TimerError> {
         if !self.finished {
-            return Err(TimerError{code:0x04});
+            return Err(TimerError { code: 0x04 });
         }
 
-        let time= match self.time  {
+        let time = match self.time {
             Some(time) => time,
-            None => return Err(TimerError{code:0x03})
+            None => return Err(TimerError { code: 0x03 }),
         };
 
         Ok(time)
