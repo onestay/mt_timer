@@ -36,6 +36,24 @@ mod tests {
         std::thread::sleep(Duration::from_secs(1));
         assert_eq!(timer.get_time().expect("illegal").as_secs(), 2);
     }
+
+    #[test]
+    fn test_subtimer() {
+        let mut timer = Timer::new();
+        let a = timer.add_subtimer().expect("Error");
+        let b = timer.add_subtimer().expect("Error");
+
+        timer.start().expect("Illegal");
+        assert!(timer.add_subtimer().is_err());
+        std::thread::sleep(Duration::from_secs(1));
+        let a = timer.finish_subtimer(a).expect("Error");
+        assert_eq!(a.time.expect("Should contain time").as_secs(), 1);
+        timer.finish().expect("Illegal");
+        std::thread::sleep(Duration::from_secs(1));
+        let b = timer.get_subtimer(b).expect("Error");
+        std::thread::sleep(Duration::from_secs(1));
+        assert_eq!(b.time.expect("Should contain time").as_secs(), 1);
+    }
 }
 
 #[derive(std::cmp::PartialEq, Debug)]
