@@ -117,8 +117,15 @@ impl Timer {
     }
 
     pub fn finish(&mut self) -> Result<(), TimerError> {
-        self.timer_state = self.next_state(TimerState::Finished)?;
 
+        self.timer_state = self.next_state(TimerState::Finished)?;
+        let time = self.get_time()?;
+
+        for sub_timer in &mut self.sub_timers {
+            sub_timer.finished = true;
+            sub_timer.time = Some(time)
+        }
+        
         Ok(())
     }
 
@@ -219,7 +226,7 @@ impl Timer {
         } else if self.timer_state != TimerState::Running {
             return Err(TimerError { code: 0x01 });
         }
-        
+
         self.check_subtimer_index(index)?;
 
         let subtimer = &mut self.sub_timers[index];
