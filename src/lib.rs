@@ -132,6 +132,8 @@ impl Timer {
         self.start_time = None;
         self.last_paused = None;
 
+        self.sub_timers.clear();
+
         Ok(())
     }
 
