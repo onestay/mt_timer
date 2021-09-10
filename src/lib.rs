@@ -1,7 +1,8 @@
 use std::{
-    fmt,
     time::{Duration, Instant},
 };
+
+use thiserror::Error;
 
 #[cfg(test)]
 mod tests {
@@ -63,7 +64,7 @@ mod tests {
     }
 }
 
-#[derive(std::cmp::PartialEq, Debug)]
+#[derive(std::cmp::PartialEq, Debug, Clone, Copy)]
 pub enum TimerState {
     Init,
     Running,
@@ -90,12 +91,12 @@ impl Timer {
 
     pub fn get_time(&self) -> Result<Duration, TimerError> {
         if self.timer_state == TimerState::Init {
-            return Err(TimerError { code: 0x01 });
+            return Err(TimerError::Unsupported{operation: "get time".to_string(), state: self.timer_state});
         }
         if let Some(start_time) = self.start_time {
             Ok(Instant::now().duration_since(start_time))
         } else {
-            Err(TimerError { code: 0x03 })
+            Err(TimerError::NoneUnexpected)
         }
     }
 
@@ -115,17 +116,17 @@ impl Timer {
     pub fn resume(&mut self) -> Result<(), TimerError> {
         // If timer is in init state it shouldn't be able to be resumed. However we can't really check that in next_state()
         if self.timer_state == TimerState::Init {
-            return Err(TimerError { code: 0x01 });
+            return Err(TimerError::IllegalStateTransition{current: self.timer_state, next: TimerState::Running});
         }
         self.timer_state = self.next_state(TimerState::Running)?;
         let start_time = match self.start_time {
             Some(start_time) => start_time,
-            None => return Err(TimerError { code: 0x03 }),
+            None => return Err(TimerError::NoneUnexpected),
         };
 
         let last_paused = match self.last_paused {
             Some(start_time) => start_time,
-            None => return Err(TimerError { code: 0x03 }),
+            None => return Err(TimerError::NoneUnexpected),
         };
 
         let time_diff = start_time + Instant::now().duration_since(last_paused);
@@ -157,7 +158,7 @@ impl Timer {
     }
 
     fn next_state(&self, state: TimerState) -> Result<TimerState, TimerError> {
-        let timer_error = TimerError { code: 0x01 };
+        let timer_error = TimerError::IllegalStateTransition{current: self.timer_state, next: state};
         match state {
             TimerState::Init => match self.timer_state {
                 TimerState::Finished => return Ok(TimerState::Init),
@@ -180,7 +181,7 @@ impl Timer {
 
     pub fn add_subtimer(&mut self) -> Result<usize, TimerError> {
         if self.timer_state != TimerState::Init {
-            return Err(TimerError { code: 0x01 });
+            return Err(TimerError::Unsupported{state: self.timer_state, operation: "add subtimer".to_string()});
         }
         let sub_timer = SubTimer {
             time: None,
@@ -194,7 +195,7 @@ impl Timer {
 
     pub fn finish_subtimer(&mut self, index: usize) -> Result<&SubTimer, TimerError> {
         if self.timer_state != TimerState::Running {
-            return Err(TimerError { code: 0x01 });
+            return Err(TimerError::IllegalStateTransition{current:self.timer_state, next: TimerState::Finished});
         }
 
         self.check_subtimer_index(index)?;
@@ -203,7 +204,7 @@ impl Timer {
 
         let sub_timer = &mut self.sub_timers[index];
         if sub_timer.finished {
-            return Err(TimerError { code: 0x01 });
+            return Err(TimerError::Unsupported{operation: "finish subtimer".to_string(), state: TimerState::Finished});
         }
         sub_timer.time = Some(time);
         sub_timer.finished = true;
@@ -225,7 +226,7 @@ impl Timer {
 
     pub fn delete_subtimer(&mut self, index: usize) -> Result<(), TimerError> {
         if self.timer_state != TimerState::Init {
-            return Err(TimerError { code: 0x01 });
+            return Err(TimerError::Unsupported{operation: "delete subtimer".to_string(), state: self.timer_state});
         }
         self.check_subtimer_index(index)?;
 
@@ -241,7 +242,7 @@ impl Timer {
 
     fn check_subtimer_index(&self, index: usize) -> Result<(), TimerError> {
         if self.sub_timers.len() == 0 || index > self.sub_timers.len() {
-            return Err(TimerError { code: 0x02 });
+            return Err(TimerError::InvalidSubtimerIndex(index));
         }
 
         Ok(())
@@ -251,7 +252,7 @@ impl Timer {
         if self.timer_state == TimerState::Finished {
             self.resume()?;
         } else if self.timer_state != TimerState::Running {
-            return Err(TimerError { code: 0x01 });
+            return Err(TimerError::Unsupported{state: self.timer_state, operation: "resume subtimer".to_string()});
         }
 
         self.check_subtimer_index(index)?;
@@ -263,24 +264,28 @@ impl Timer {
         Ok(())
     }
 }
-#[derive(Debug)]
-pub struct TimerError {
-    code: usize,
+#[derive(Debug, Error)]
+pub enum TimerError {
+    #[error("Illegal timer transition attempted. Can't go from state {current:?} to {next:?}")]
+    IllegalStateTransition {
+        current: TimerState,
+        next: TimerState
+    },
+    #[error("Operation {operation:?} not supported when timer in state {state:?}")]
+    Unsupported {
+        state: TimerState,
+        operation: String
+    },
+    #[error("Invalid subtimer index `{0}`")]
+    InvalidSubtimerIndex(usize),
+    #[error("'None' not expected")]
+    NoneUnexpected,
+    #[error("Subtimer not finished")]
+    SubTimerNotFinished,
+    #[error("An unexpected error occured")]
+    Unexpected
 }
 
-impl fmt::Display for TimerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let msg = match self.code {
-            0x01 => "Illegal timer state",
-            0x02 => "Invalid subtimer index",
-            0x03 => "'None' not expected",
-            0x04 => "SubTimer not finished",
-            _ => "Unexpected Error",
-        };
-
-        write!(f, "{}", msg)
-    }
-}
 #[derive(Debug, PartialEq)]
 pub struct SubTimer {
     time: Option<Duration>,
@@ -290,12 +295,12 @@ pub struct SubTimer {
 impl SubTimer {
     pub fn get_time(&self) -> Result<Duration, TimerError> {
         if !self.finished {
-            return Err(TimerError { code: 0x04 });
+            return Err(TimerError::SubTimerNotFinished);
         }
 
         let time = match self.time {
             Some(time) => time,
-            None => return Err(TimerError { code: 0x03 }),
+            None => return Err(TimerError::NoneUnexpected),
         };
 
         Ok(time)
